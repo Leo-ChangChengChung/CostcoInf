@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>目擊情報</title>
+  <style>
+    :root {
+      --ink: #1c1917;
+      --muted: #57534e;
+      --line: #e7e5e4;
+      --stamp: #b42318;
+      --paper: #ffffff;
+      --miss: #f5f5f4;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { -webkit-text-size-adjust: 100%; }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+      line-height: 1.45;
+    }
+
+    a { color: inherit; }
+
+    a:focus-visible {
+      outline: 2px solid var(--stamp);
+      outline-offset: 3px;
+    }
+
+    .wrap {
+      width: min(40rem, 100%);
+      margin: 0 auto;
+      padding: 0 1rem calc(1.5rem + env(safe-area-inset-bottom));
+    }
+
+    .top {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: rgba(255, 255, 255, 0.94);
+      padding-top: env(safe-area-inset-top);
+    }
+
+    .top-inner {
+      width: min(40rem, 100%);
+      margin: 0 auto;
+      padding: 0.85rem 1rem 0.7rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .meta {
+      margin: 0.2rem 0 0;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .bar-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+
+    .back {
+      color: var(--stamp);
+      font-weight: 700;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .bar-when {
+      flex: 1;
+      min-width: 0;
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .list { list-style: none; margin: 0; padding: 0; }
+
+    .list a {
+      display: block;
+      padding: 0.95rem 0 0.85rem;
+      border-bottom: 1px solid var(--line);
+      text-decoration: none;
+    }
+
+    .when {
+      margin: 0;
+      font-size: 1.65rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+    }
+
+    .when.range { font-size: 1.2rem; }
+
+    .week {
+      margin-left: 0.35rem;
+      color: var(--stamp);
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+
+    .title, .detail-title {
+      overflow-wrap: anywhere;
+    }
+
+    .title {
+      margin: 0.28rem 0 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .count {
+      margin: 0.35rem 0 0;
+      font-size: 0.85rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .detail-title {
+      margin: 0.85rem 0 0.75rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .photos { margin: 0; padding: 0; }
+
+    .photos img {
+      display: block;
+      width: 100%;
+      height: auto;
+      margin: 0 0 0.45rem;
+      background: var(--miss);
+    }
+
+    .source {
+      display: inline-block;
+      margin-top: 0.4rem;
+      color: var(--stamp);
+      font-weight: 700;
+    }
+
+    .note, .status {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .status { padding: 1.25rem 0; }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner" id="bar"></div>
+  </header>
+  <main class="wrap" id="app">
+    <p class="status">正在讀取目擊情報…</p>
+  </main>
+  <script>
+    const app = document.getElementById("app");
+    const bar = document.getElementById("bar");
+    let feed = null;
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, function (ch) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+      });
+    }
+
+    function safeUrl(value) {
+      try {
+        const url = new URL(value);
+        if (url.protocol === "https:" || url.protocol === "http:") return url.href;
+      } catch (error) {
+        return "";
+      }
+      return "";
+    }
+
+    function formatUpdated(iso) {
+      const date = new Date(iso);
+      if (Number.isNaN(date.getTime())) return iso;
+      const month = date.getMonth() + 1;
+      const day = date.getDate();
+      const hour = String(date.getHours()).padStart(2, "0");
+      const minute = String(date.getMinutes()).padStart(2, "0");
+      return month + "月" + day + "日 " + hour + ":" + minute;
+    }
+
+    function whenHtml(label) {
+      const match = String(label).match(/^(.*)\s(週[一二三四五六日])$/);
+      const range = String(label).indexOf("–") !== -1;
+      if (!match) {
+        return '<p class="when' + (range ? " range" : "") + '">' + escapeHtml(label) + "</p>";
+      }
+      return '<p class="when">' + escapeHtml(match[1]) + ' <span class="week">' + escapeHtml(match[2]) + "</span></p>";
+    }
+
+    function currentId() {
+      const id = location.hash.replace(/^#/, "");
+      return /^\d+$/.test(id) ? id : "";
+    }
+
+    function findPost(id) {
+      return (feed.posts || []).find(function (post) {
+        return String(post.id) === id;
+      });
+    }
+
+    function renderBar(post) {
+      if (!post) {
+        bar.innerHTML =
+          "<h1>目擊情報</h1>" +
+          '<p class="meta">更新於 ' + escapeHtml(formatUpdated(feed.updated)) + "</p>";
+        return;
+      }
+      bar.innerHTML =
+        '<div class="bar-row"><a class="back" href="#">返回</a>' +
+        '<p class="bar-when">' + escapeHtml(post.dateLabel || "") + "</p></div>";
+    }
+
+    function renderList() {
+      renderBar(null);
+      const posts = feed.posts || [];
+      if (!posts.length) {
+        app.innerHTML = '<p class="status">目前沒有目擊情報。</p>';
+        return;
+      }
+      const items = posts.map(function (post) {
+        const count = (post.images || []).length;
+        return (
+          '<li><a href="#' + escapeHtml(post.id) + '">' +
+          whenHtml(post.dateLabel || "") +
+          '<p class="title">' + escapeHtml(post.title || "") + "</p>" +
+          '<p class="count">' + count + " 張照片</p>" +
+          "</a></li>"
+        );
+      }).join("");
+      app.innerHTML =
+        '<ul class="list">' + items + "</ul>" +
+        '<p class="note">資料來自今購百科賣場目擊情報，大約每 2 小時更新。</p>';
+    }
+
+    function renderDetail(id) {
+      const post = findPost(id);
+      if (!post) {
+        renderBar(null);
+        app.innerHTML = '<p class="status">找不到這篇。 <a class="source" href="#">回列表</a></p>';
+        return;
+      }
+      renderBar(post);
+      const images = (post.images || []).map(safeUrl).filter(Boolean);
+      const source = safeUrl(post.link);
+      let photos = '<p class="status">這篇沒有照片。</p>';
+      if (images.length) {
+        photos = '<div class="photos">' + images.map(function (url, index) {
+          const alt = (post.title || "目擊照片") + " " + (index + 1);
+          const loading = index < 2 ? "eager" : "lazy";
+          return '<img loading="' + loading + '" decoding="async" alt="' + escapeHtml(alt) + '" src="' + escapeHtml(url) + '">';
+        }).join("") + "</div>";
+      }
+      const origin = source
+        ? '<a class="source" href="' + escapeHtml(source) + '" rel="noopener">原文</a>'
+        : "";
+      app.innerHTML =
+        '<p class="detail-title">' + escapeHtml(post.title || "") + "</p>" +
+        photos + origin;
+    }
+
+    function render() {
+      if (!feed) return;
+      const id = currentId();
+      if (id) renderDetail(id);
+      else renderList();
+      window.scrollTo(0, 0);
+    }
+
+    window.addEventListener("hashchange", render);
+
+    fetch("data/posts.json", { cache: "no-store" })
+      .then(function (response) {
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        return response.json();
+      })
+      .then(function (data) {
+        feed = data;
+        render();
+      })
+      .catch(function () {
+        bar.innerHTML = "<h1>目擊情報</h1>";
+        app.innerHTML = '<p class="status">讀不到資料。請確認 data/posts.json 在同一個網站目錄，然後重新整理。</p>';
+      });
+  </script>
+</body>
+</html>
