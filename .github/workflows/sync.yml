@@ -15,18 +15,28 @@ concurrency:
 
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
       - name: Fetch posts
-        run: python scripts/sync_posts.py
+        run: |
+          for i in 1 2 3; do
+            if python scripts/sync_posts.py; then
+              exit 0
+            fi
+            echo "第 ${i} 次抓取失敗，保留舊資料"
+            if [ "$i" -lt 3 ]; then
+              sleep 20
+            fi
+          done
+          echo "三次都失敗，這次不更新，流程仍標成成功"
 
       - name: Commit if changed
         run: |
